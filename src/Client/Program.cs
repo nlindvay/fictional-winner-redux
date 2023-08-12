@@ -27,13 +27,11 @@ builder.Host.UseSerilog();
 var app = builder.Build();
 app.UseSerilogRequestLogging();
 
-// submit order
-
+#region Order API
 app.MapPost("order/", async ([FromServices] IRequestClient<OrderSubmitted> _client, SubmitOrder _request) =>
 {
-    var orderSubmitted = new OrderSubmitted(Guid.NewGuid(), DateTime.UtcNow, _request.PrimaryReference, _request.CustomerNumber, _request.PaymentCardNumber, _request.Notes, _request.OrderLines);
-
-    var (accepted, exists, rejected) = await _client.GetResponse<OrderSubmissionAccepted, OrderSubmissionExists, OrderSubmissionRejected>(orderSubmitted);
+    var message = new OrderSubmitted(Guid.NewGuid(), DateTime.UtcNow, _request.PrimaryReference, _request.CustomerNumber, _request.PaymentCardNumber, _request.Notes, _request.OrderLines);
+    var (accepted, exists, rejected) = await _client.GetResponse<OrderSubmissionAccepted, OrderSubmissionExists, OrderSubmissionRejected>(message);
 
     if (accepted.IsCompletedSuccessfully)
     {
@@ -53,11 +51,10 @@ app.MapPost("order/", async ([FromServices] IRequestClient<OrderSubmitted> _clie
 
 }).WithTags("order").WithName("order-submit");
 
-// get order status
-
 app.MapGet("order/{id}", async ([FromServices] IRequestClient<CheckOrderStatus> _client, Guid id) =>
 {
-    var (status, notFound) = await _client.GetResponse<OrderStatus, OrderNotFound>(new(id));
+    var message = new CheckOrderStatus(id);
+    var (status, notFound) = await _client.GetResponse<OrderStatus, OrderNotFound>(message);
 
     if (status.IsCompletedSuccessfully)
     {
@@ -70,18 +67,67 @@ app.MapGet("order/{id}", async ([FromServices] IRequestClient<CheckOrderStatus> 
         return Results.NotFound(response.Message);
     }
 }).WithTags("order").WithName("order-status");
+#endregion
 
-// cancel order
-
-app.MapDelete("customer/{id}", async ([FromServices] IPublishEndpoint _endpoint, Guid id, string customerNumber) =>
+#region Customer API
+app.MapPost("customer", async ([FromServices] IRequestClient<CustomerSubmitted> _client, SubmitCustomer _request) =>
 {
-    await _endpoint.Publish<OrderCustomerAccountClosed>(new(id, customerNumber));
+    var message = new CustomerSubmitted(Guid.NewGuid(), DateTime.UtcNow, _request.CustomerNumber, _request.CustomerName);
+    var (accepted, exists, rejected) = await _client.GetResponse<CustomerSubmissionAccepted, CustomerSubmissionExists, CustomerSubmissionRejected>(message);
+
+    if (accepted.IsCompletedSuccessfully)
+    {
+        var response = await accepted;
+        return Results.Ok(response.Message);
+    }
+    else if (exists.IsCompletedSuccessfully)
+    {
+        var response = await exists;
+        return Results.Conflict(response.Message);
+    }
+    else
+    {
+        var response = await rejected;
+        return Results.BadRequest(response.Message);
+    }
+
+}).WithTags("customer").WithName("customer-submit");
+
+app.MapDelete("customer/{id}/action/orders/cancel", async ([FromServices] IPublishEndpoint _endpoint, Guid id, string customerNumber) =>
+{
+    var payload = new OrderCustomerAccountClosed(id, customerNumber);
+    await _endpoint.Publish(payload);
 
     return Results.Accepted();
 
-}).WithTags("order").WithName("order-cancel");
+}).WithTags("customer").WithName("customer-cancel-orders");
+#endregion
 
 
+#region Product API
+app.MapPost("product", async ([FromServices] IRequestClient<ProductSubmitted> _client, SubmitProduct _request) =>
+{
+    var message = new ProductSubmitted(Guid.NewGuid(), DateTime.UtcNow, _request.ProductCode, _request.CustomerNumber, _request.ProductName, _request.Quantity);
+    var (accepted, exists, rejected) = await _client.GetResponse<ProductSubmissionAccepted, ProductSubmissionExists, ProductSubmissionRejected>(message);
+
+    if (accepted.IsCompletedSuccessfully)
+    {
+        var response = await accepted;
+        return Results.Ok(response.Message);
+    }
+    else if (exists.IsCompletedSuccessfully)
+    {
+        var response = await exists;
+        return Results.Conflict(response.Message);
+    }
+    else
+    {
+        var response = await rejected;
+        return Results.BadRequest(response.Message);
+    }
+
+}).WithTags("product").WithName("product-submit");
+#endregion
 
 app.UseSwagger();
 app.UseSwaggerUI();
