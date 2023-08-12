@@ -1,0 +1,60 @@
+version: "3.6"
+
+networks:
+  fwredux:
+
+services:
+  mongo:
+    image: "mongo"
+    networks:
+     - fwredux
+    ports:
+    - '27017-27019:27017-27019'
+  rabbitmq:
+    image: masstransit/rabbitmq:latest
+    networks:
+     - fwredux
+    ports:
+     - "5672:5672"
+     - "15672:15672"
+     - "15692:15692"
+    healthcheck:
+        timeout: 5s
+        interval: 5s
+        retries: 10
+        test:
+          - "CMD"
+          - "rabbitmqctl"
+          - "status" 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    networks:
+     - fwredux
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14250:14250"
+      - "14268:14268"
+      - "14269:14269"
+      - "9411:9411"
+  fwr-client:
+    image: fwredux/client:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile-client
+    networks:
+      - fwredux
+    ports:
+      - "5004:80"
+  fwr-worker:
+    image: fwredux/worker:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile-worker
+    networks:
+      - fwredux
+    ports:
+      - "5005:80"
