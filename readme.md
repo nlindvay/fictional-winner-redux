@@ -1,6 +1,7 @@
 ## Fiddle project to look at no mediation and simply using queues to fulfill typical handler / mediation process.
 Based on https://github.com/MassTransit/Sample-Twitch
 
+## TO run just download this repo and boot up docker desktop. Then type ```docker compose up```.
 ### Technologies used
 + MassTransit
 + OpenTelemetry
